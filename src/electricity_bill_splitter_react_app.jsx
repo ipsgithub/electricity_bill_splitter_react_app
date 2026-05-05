@@ -38,21 +38,39 @@ export default function ElectricityBillSplitter() {
     const s1Alloc = [16, 17, 17];
     const remainingAfterS1 = houses.map((h, i) => Math.max(h.units - s1Alloc[i], 0));
 
-    const s2Base = remainingAfterS1.map((r) => Math.min(r, form.s2Units / 3));
-    const s2Used = s2Base.reduce((a, b) => a + b, 0);
-    const leftoverS2 = form.s2Units - s2Used;
+    // Iterative fair-share S2 allocation:
+    // If a house can't use its equal share, its unused quota is redistributed
+    // equally among the remaining eligible houses.
+    const s2Alloc = new Array(houses.length).fill(0);
+    let s2Remaining = form.s2Units;
+    let eligible = houses.map((_, i) => i);
 
-    const maxIndex = houses.reduce(
-      (max, h, i, arr) => (h.units > arr[max].units ? i : max),
-      0
-    );
+    while (s2Remaining > 0.001 && eligible.length > 0) {
+      const share = s2Remaining / eligible.length;
+      const nextEligible = [];
 
-    const s2Alloc = [...s2Base];
-    s2Alloc[maxIndex] += leftoverS2;
+      for (const i of eligible) {
+        const capacity = remainingAfterS1[i] - s2Alloc[i];
+        if (capacity <= share) {
+          s2Alloc[i] += capacity;
+          s2Remaining -= capacity;
+        } else {
+          nextEligible.push(i);
+        }
+      }
+
+      if (nextEligible.length === eligible.length) {
+        for (const i of nextEligible) s2Alloc[i] += share;
+        s2Remaining = 0;
+        break;
+      }
+
+      eligible = nextEligible;
+    }
 
     const perHouse = houses.map((house, i) => {
       const s1 = Math.min(s1Alloc[i], house.units);
-      const s2 = Math.min(s2Alloc[i], remainingAfterS1[i]);
+      const s2 = s2Alloc[i];
       const s3 = Math.max(house.units - s1 - s2, 0);
 
       const energy =
@@ -115,16 +133,17 @@ export default function ElectricityBillSplitter() {
         <CardContent className="p-6 space-y-4">
           <h2 className="text-xl font-semibold">Bill Split</h2>
           <p className="text-sm">Misc Charges: ₹{result.misc.toFixed(2)}</p>
+          <p className="text-sm">Individual Misc Charges: ₹{result.misc.toFixed(2)} / {result.perHouse.length} = ₹{(result.misc / result.perHouse.length).toFixed(9)}</p>
 
           {result.perHouse.map((house) => (
             <div key={house.name} className="border rounded-xl p-3">
               <div className="font-medium">{house.name}</div>
               <div className="text-sm">Units: {house.units}</div>
-              <div className="text-sm">S1: {house.s1}</div>
-              <div className="text-sm">S2: {house.s2}</div>
-              <div className="text-sm">S3: {house.s3}</div>
-              <div className="text-sm">Energy: ₹{house.energy.toFixed(2)}</div>
-              <div className="font-semibold">Pay: ₹{house.total.toFixed(2)}</div>
+              <div className="text-sm">S1: {house.s1} x {form.s1Rate} = ₹{Number((house.s1 * form.s1Rate).toFixed(2))}</div>
+              <div className="text-sm">S2: {house.s2} x {form.s2Rate} = ₹{Number((house.s2 * form.s2Rate).toFixed(2))}</div>
+              <div className="text-sm">S3: {house.s3} x {form.s3Rate} = ₹{Number((house.s3 * form.s3Rate).toFixed(2))}</div>
+              <div className="text-sm">Energy(s1 + s2 + s3): ₹{house.energy.toFixed(2)}</div>
+              <div className="font-semibold">Pay(Energy+Indv Misc): ₹{house.total.toFixed(2)} → ₹{Math.round(house.total)}</div>
             </div>
           ))}
 
