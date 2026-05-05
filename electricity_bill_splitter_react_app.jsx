@@ -148,7 +148,7 @@ export default function ElectricityBillSplitter() {
           ))}
 
           <div className="pt-2 border-t">
-            <div className="font-medium">Grand Total: ₹{result.grandTotal.toFixed(2)}</div>
+            <div className="font-medium">Grand Total: ₹{result.grandTotal.toFixed(2)} → ₹{Math.round(result.grandTotal)}</div>
           </div>
         </CardContent>
       </Card>
